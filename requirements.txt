@@ -1,0 +1,15 @@
+# Geospatial — GDAL is provided by the osgeo/gdal base image, do not pip install it
+rasterio==1.3.10
+numpy==1.26.4
+
+# Image processing
+opencv-python-headless==4.9.0.80
+scikit-image==0.23.2
+scipy==1.13.0
+
+# Frontend
+streamlit==1.35.0
+Pillow==10.3.0
+
+# Utilities
+tqdm==4.66.4

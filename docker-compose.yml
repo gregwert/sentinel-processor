@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  sentinel-app:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./sample_data:/app/sample_data:ro
+      - chip_output:/tmp/chips
+    environment:
+      - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=2048
+    restart: unless-stopped
+
+volumes:
+  chip_output:

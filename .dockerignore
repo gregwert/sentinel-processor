@@ -1,0 +1,8 @@
+__pycache__
+*.pyc
+*.pyo
+.git
+sample_data
+tests
+.env
+*.md
