@@ -4,7 +4,6 @@ Shows processing parameters, processed image, and chips (if not skipped).
 All exports are selected via checkboxes then generated together as a single zip.
 """
 import streamlit as st
-import numpy as np
 import io, os, zipfile, tempfile
 import yaml
 from PIL import Image as PILImage
@@ -73,13 +72,55 @@ def _build_export_zip(state, export_params, export_image, img_fmt,
                 )
                 for path in paths:
                     zf.write(path, arcname=os.path.join("chips", os.path.basename(path)))
-                added = True
+                if paths:
+                    added = True
 
     return buf.getvalue() if added else None
 
 
 def render(state: dict) -> bool:
-    """Render review step. Returns True if user clicks Start Over."""
+    """Render Step 5 — Review & Export.
+
+    Reads from state
+    ----------------
+    upload_params : dict
+        Band indices and stretch percentiles from step_upload. Included
+        in the parameters YAML export when present.
+    dehaze_params : dict
+        DCP parameters or {'skipped': True} from step_dehaze. Included
+        in the parameters YAML export when present.
+    enhance_params : dict
+        Enhancement method and params or {'skipped': True} from
+        step_enhance. Included in the parameters YAML export when present.
+    chip_params : dict
+        Grid dimensions, overlap, naming, and edge mode from step_chip.
+        Included in the parameters YAML export when present.
+    enhanced_image : np.ndarray
+        uint8 (H, W, 3) final processed image. Displayed and exported as
+        PNG or GeoTIFF.
+    source_meta : dict
+        Rasterio metadata dict used when exporting a GeoTIFF.
+    chip_grid : ChipGrid or None
+        Built chip grid from step_chip. When present the chips section
+        is shown and chips can be exported.
+    chip_skipped : bool
+        When True the chips section is hidden and no chips are exported.
+    global_stats : dict or None
+        {'mean': [r,g,b], 'std': [r,g,b]} from step_enhance. Exposed as
+        an optional z-score normalisation pass during chip export.
+
+    Writes to state
+    ---------------
+    (all keys) : cleared
+        When the user clicks '← Start Over' every key in state is deleted
+        so the wizard resets to step_upload.
+
+    Returns
+    -------
+    bool
+        Always returns False. The Start Over button clears state and
+        calls st.rerun() directly rather than signalling via return value.
+    """
 
     st.header("Review & Export")
 

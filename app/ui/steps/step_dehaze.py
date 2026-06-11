@@ -3,27 +3,56 @@ Step 2 — Cloud overlay with live-adjustable thresholds, DCP dehazing controls,
 side-by-side before/after comparison.
 """
 import streamlit as st
-import numpy as np
 from processing.dehazing import detect_clouds_simple, dehaze
 from ui.cloud_overlay import render_cloud_composite, compute_cloud_stats
+from ui.steps import render_step_nav
 
 
 def render(state: dict) -> bool:
-    """Render dehaze step. Returns True when user clicks Next to advance."""
+    """Render Step 2 — Dehazing.
 
-    col_back, col_spacer, col_skip = st.columns([1, 4, 1])
-    with col_back:
-        if st.button("← Back", key="back_dehaze"):
-            for k in ["cloud_mask", "dehazed_image", "dehaze_params"]:
-                state.pop(k, None)
-            state["step"] = "upload"
-            st.rerun()
-    with col_skip:
-        if st.button("Skip →", key="skip_dehaze"):
-            state["dehazed_image"] = state["stretched_image"].copy()
-            state["dehaze_params"] = {"skipped": True}
-            state["step"] = "enhance"
-            st.rerun()
+    Reads from state
+    ----------------
+    stretched_image : np.ndarray
+        The uint8 (H, W, 3) image produced by step_upload.
+    dehaze_params : dict
+        Parameters used for the previous run (if any), used to detect
+        stale-result conditions and display the last-run summary.
+    dehazed_image : np.ndarray
+        Previously computed dehaze result (if any), used in the
+        before/after comparison panel.
+
+    Writes to state
+    ---------------
+    cloud_mask : np.ndarray
+        bool (H, W) cloud detection mask. Updated live on every
+        threshold slider change when cloud-adaptive mode is enabled.
+    dehazed_image : np.ndarray
+        uint8 (H, W, 3) result after DCP dehazing. Set on Run Dehazing
+        click, or copied from stretched_image when skipped.
+    dehaze_params : dict
+        Parameters used for the last run, or {'skipped': True} if
+        dehazing was skipped or disabled.
+    step : str
+        Set to 'upload' on Back click, or 'enhance' on Skip click.
+
+    Returns
+    -------
+    bool
+        True when the user clicks 'Proceed to Enhancement →' to advance
+        to the enhance step. False on all other renders.
+    """
+    back, skip = render_step_nav("dehaze")
+    if back:
+        for k in ["cloud_mask", "dehazed_image", "dehaze_params"]:
+            state.pop(k, None)
+        state["step"] = "upload"
+        st.rerun()
+    if skip:
+        state["dehazed_image"] = state["stretched_image"].copy()
+        state["dehaze_params"] = {"skipped": True}
+        state["step"] = "enhance"
+        st.rerun()
 
     st.header("Step 2 — Dehazing")
 
@@ -117,6 +146,23 @@ def render(state: dict) -> bool:
             )
             st.caption("*Refines the transmission map to reduce halo artefacts at sharp edges (e.g. coastlines, cloud edges). Slightly slower but recommended.*")
 
+        if "dehazed_image" in state:
+            was_skipped = state.get("dehaze_params", {}).get("skipped", False)
+            p = state.get("dehaze_params", {})
+            stale = was_skipped or (
+                p.get("omega") != omega
+                or p.get("t0") != t0
+                or p.get("patch_size") != patch_size
+                or p.get("use_guided") != use_guided
+                or p.get("mask_clouds") != mask_clouds
+                or (mask_clouds and (
+                    p.get("brightness_thresh") != brightness_thresh
+                    or p.get("saturation_thresh") != saturation_thresh
+                ))
+            )
+            if stale:
+                st.warning("Parameters have changed since the last run — click Run Dehazing to update.")
+
         if st.button("Run Dehazing", type="primary"):
             with st.spinner("Running DCP dehazing..."):
                 dehazed = dehaze(
@@ -144,6 +190,8 @@ def render(state: dict) -> bool:
         if st.button("Skip (use image as-is)", type="secondary"):
             state["dehazed_image"] = state["stretched_image"].copy()
             state["dehaze_params"] = {"skipped": True}
+            state["step"] = "enhance"
+            st.rerun()
 
     # --- Result section (only when dehazed_image in state) ---
     if "dehazed_image" in state:
@@ -170,25 +218,6 @@ def render(state: dict) -> bool:
                 f"guided={p['use_guided']}  "
                 f"clouds={'masked' if p['mask_clouds'] else 'not masked'}"
             )
-
-        # Stale result warning
-        was_skipped = state.get("dehaze_params", {}).get("skipped", False)
-        if enable_dehaze == was_skipped:
-            st.warning("Parameters have changed since the last run — click Run Dehazing to update.")
-        elif enable_dehaze and not was_skipped:
-            p = state["dehaze_params"]
-            if (
-                p.get("omega") != omega
-                or p.get("t0") != t0
-                or p.get("patch_size") != patch_size
-                or p.get("use_guided") != use_guided
-                or p.get("mask_clouds") != mask_clouds
-                or (mask_clouds and (
-                    p.get("brightness_thresh") != brightness_thresh
-                    or p.get("saturation_thresh") != saturation_thresh
-                ))
-            ):
-                st.warning("Parameters have changed since the last run — click Run Dehazing to update.")
 
         if st.button("Proceed to Enhancement →", type="primary"):
             return True

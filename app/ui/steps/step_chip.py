@@ -3,27 +3,60 @@ Step 4 — Chip size configuration (pixels or metres), grid overlay preview,
 run chipping to build ChipGrid.
 """
 import streamlit as st
-import numpy as np
-from chipping.gdal_chipper import build_chip_grid, compute_chip_grid, ChipGrid
+from chipping.gdal_chipper import build_chip_grid, compute_chip_grid
 from ui.grid_overlay import render_grid_composite, chip_size_metres_to_pixels
+from ui.steps import render_step_nav
 
 
 def render(state: dict) -> bool:
-    """Render chip step. Returns True when user clicks Next to advance."""
+    """Render Step 4 — Chipping.
 
-    col_back, col_spacer, col_skip = st.columns([1, 4, 1])
-    with col_back:
-        if st.button("← Back", key="back_chip"):
-            for k in ["chip_grid", "chip_params", "chip_skipped"]:
-                state.pop(k, None)
-            state["step"] = "enhance"
-            st.rerun()
-    with col_skip:
-        if st.button("Skip →", key="skip_chip"):
-            state["chip_skipped"] = True
-            state.pop("chip_grid", None)
-            state["step"] = "review"
-            st.rerun()
+    Reads from state
+    ----------------
+    enhanced_image : np.ndarray
+        uint8 (H, W, 3) image produced by step_enhance (or copied from
+        dehazed_image when enhancement was skipped). Used as the chip
+        source and for grid preview rendering.
+    source_meta : dict
+        Rasterio metadata dict with CRS and Affine transform. Used for
+        metres-to-pixels conversion and written into chip GeoTIFFs.
+    chip_grid : ChipGrid
+        Previously built chip grid (if any). When present the step enters
+        Phase B (result display) instead of Phase A (configuration).
+    chip_params : dict
+        Parameters from the previous Run Chipping call (if any). Used to
+        reconstruct the overlap value for the grid overlay in Phase B.
+
+    Writes to state
+    ---------------
+    chip_grid : ChipGrid
+        Built on Run Chipping click. Removed on Back click, Skip click,
+        and Re-chip click.
+    chip_params : dict
+        Grid dimensions, overlap fraction, naming scheme, and edge mode
+        used for the last Run Chipping call.
+    chip_skipped : bool
+        Set to True on Skip click. Removed on Run Chipping click.
+    step : str
+        Set to 'enhance' on Back click, or 'review' on Skip click.
+
+    Returns
+    -------
+    bool
+        True when the user clicks 'Finalize →' (Phase B) to advance to
+        the review step. False on all other renders.
+    """
+    back, skip = render_step_nav("chip")
+    if back:
+        for k in ["chip_grid", "chip_params", "chip_skipped"]:
+            state.pop(k, None)
+        state["step"] = "enhance"
+        st.rerun()
+    if skip:
+        state["chip_skipped"] = True
+        state.pop("chip_grid", None)
+        state["step"] = "review"
+        st.rerun()
 
     st.header("Step 4 — Chipping")
 
@@ -102,7 +135,11 @@ def render(state: dict) -> bool:
     naming = st.selectbox("Chip naming", ["coords", "rowcol"])
 
     windows = compute_chip_grid(img_w, img_h, int(chip_w), int(chip_h), overlap, edge_mode)
+    # n_cols: windows whose row_off==0 are all in the first row, one per column.
     n_cols = len([w for w in windows if w[1] == 0])
+    # n_rows: unique row offsets. In 'overlap' edge mode the last row may be
+    # clamped to the same offset as its predecessor, so this reflects the actual
+    # deduplicated grid rather than a theoretical count — intentional.
     n_rows = len(set(w[1] for w in windows))
     st.caption(f"Grid: {n_rows} rows × {n_cols} cols = {len(windows)} chips")
 

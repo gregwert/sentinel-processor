@@ -11,8 +11,26 @@ import numpy as np
 import cv2
 
 
-def apply_clahe(img_uint8, clip_limit=2.0, tile_grid_size=(8, 8)):
-    """Apply CLAHE on L channel in LAB space to avoid color hue shifts."""
+def apply_clahe(img_uint8: np.ndarray, clip_limit: float = 2.0, tile_grid_size: tuple = (8, 8)) -> np.ndarray:
+    """Enhance local contrast via CLAHE applied to the L channel in LAB colour space.
+
+    Parameters
+    ----------
+    img_uint8 : np.ndarray
+        Shape (H, W, 3), dtype uint8. Input RGB image.
+    clip_limit : float, optional
+        CLAHE contrast clip limit. Higher values allow stronger contrast
+        enhancement but increase noise amplification; default 2.0.
+    tile_grid_size : tuple of int, optional
+        ``(rows, cols)`` tile grid used by CLAHE. Smaller tiles enhance local
+        contrast more aggressively; default (8, 8).
+
+    Returns
+    -------
+    np.ndarray
+        Shape (H, W, 3), dtype uint8. Contrast-enhanced RGB image with hue and
+        saturation unchanged.
+    """
     lab = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2LAB)
     l, a, b = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
@@ -22,8 +40,24 @@ def apply_clahe(img_uint8, clip_limit=2.0, tile_grid_size=(8, 8)):
     return result
 
 
-def apply_standardization(img_uint8, target_mean=127.5, target_std=45.0):
-    """Z-score normalise then rescale to target mean/std distribution."""
+def apply_standardization(img_uint8: np.ndarray, target_mean: float = 127.5, target_std: float = 45.0) -> np.ndarray:
+    """Z-score normalise per-channel then rescale to a target mean and standard deviation.
+
+    Parameters
+    ----------
+    img_uint8 : np.ndarray
+        Shape (H, W, 3), dtype uint8. Input RGB image.
+    target_mean : float, optional
+        Desired mean pixel value in the output; default 127.5.
+    target_std : float, optional
+        Desired standard deviation of pixel values in the output; default 45.0.
+
+    Returns
+    -------
+    np.ndarray
+        Shape (H, W, 3), dtype uint8. Image rescaled to the requested
+        luminance distribution, clipped to [0, 255].
+    """
     img_f = img_uint8.astype(np.float32)
     mean = img_f.mean(axis=(0, 1), keepdims=True)
     std = img_f.std(axis=(0, 1), keepdims=True) + 1e-6

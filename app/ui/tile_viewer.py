@@ -1,29 +1,32 @@
 """
 ui/tile_viewer.py
 
-Streamlit component for browsing and exporting chipped tiles.
+Streamlit component for browsing chipped tiles.
 Renders a paginated thumbnail gallery of chips produced by the chipping
-module and provides format selection and download controls.
+module.
 """
 
 import streamlit as st
-import numpy as np
 
 from chipping.gdal_chipper import get_chip
-from chipping.tile_exporter import export_chips, zip_export
 
 COLS_PER_ROW = 4
-
-_FORMAT_DESCRIPTIONS = {
-    "png": "PNG — visual export, no georeferencing",
-    "jpeg": "JPEG — compressed visual, no georeferencing",
-    "geotiff": "GeoTIFF — full georeferencing preserved",
-    "npy": "NPY — numpy array for ML pipelines",
-}
+DEFAULT_PAGE_SIZE = 16
 
 
-def render_tile_viewer(grid, page_size: int = 16):
-    """Render paginated chip thumbnail gallery in Streamlit."""
+def render_tile_viewer(grid, page_size: int = DEFAULT_PAGE_SIZE) -> None:
+    """Render a paginated chip thumbnail gallery in Streamlit.
+
+    Parameters
+    ----------
+    grid : object
+        Chip grid descriptor returned by the chipping module. Expected to
+        expose ``grid.total`` (int), ``grid.n_rows`` (int), and
+        ``grid.n_cols`` (int).
+    page_size : int, optional
+        Number of chip thumbnails to display per page.
+        Default :data:`DEFAULT_PAGE_SIZE` (16).
+    """
     if "tile_page" not in st.session_state:
         st.session_state["tile_page"] = 0
     page = st.session_state["tile_page"]
@@ -62,37 +65,3 @@ def render_tile_viewer(grid, page_size: int = 16):
         col = cols[i % COLS_PER_ROW]
         with col:
             st.image(chip_arr, caption=f"r{row_i:04d}_c{col_i:04d}", use_column_width=True)
-
-
-def render_export_controls(grid, global_stats=None) -> "bytes | None":
-    """Render format selector + export button; return zip bytes when triggered."""
-    st.subheader("Export Chips")
-
-    col_fmt, col_naming = st.columns(2)
-    with col_fmt:
-        fmt = st.selectbox("Format", ["png", "jpeg", "geotiff", "npy"], key="export_fmt")
-    with col_naming:
-        naming = st.selectbox("Naming", ["rowcol", "coords"], key="export_naming")
-
-    st.caption(_FORMAT_DESCRIPTIONS.get(fmt, ""))
-
-    normalise = False
-    if global_stats is not None:
-        normalise = st.checkbox(
-            "Normalise chips (z-score)",
-            value=False,
-            help="Apply global-image z-score normalisation at export time. "
-                 "Useful for ML pipeline inputs. NPY format exports raw float32.",
-            key="export_normalise",
-        )
-
-    if st.button("Export All Chips", type="primary"):
-        with st.spinner(f"Exporting {grid.total} chips as {fmt.upper()}..."):
-            import tempfile
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                paths = export_chips(grid, tmp_dir, fmt=fmt, naming=naming,
-                                     normalise=normalise, global_stats=global_stats)
-                zip_bytes = zip_export(paths)
-        return zip_bytes
-
-    return None

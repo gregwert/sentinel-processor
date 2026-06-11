@@ -21,7 +21,34 @@ def _display_image(img_uint8: np.ndarray, max_px: int = 800):
 
 
 def render(state: dict) -> bool:
-    """Render upload step. Returns True when user clicks Next to advance."""
+    """Render Step 1 — Upload.
+
+    Reads from state
+    ----------------
+    _upload_params_key : str
+        Internal cache key used to detect parameter changes and avoid
+        re-reading the TIFF when nothing has changed.
+
+    Writes to state
+    ---------------
+    stretched_image : np.ndarray
+        uint8 (H, W, 3) percentile-stretched true-colour composite.
+        Updated whenever the file or any display parameter changes.
+    source_meta : dict
+        Rasterio metadata dict containing CRS and Affine transform.
+        Updated alongside stretched_image.
+    upload_params : dict
+        Band indices and stretch percentiles used for the last read.
+        Keys: band_indices, p_low, p_high, per_band_stretch.
+    _upload_params_key : str
+        Internal cache key reflecting the current file-id and parameters.
+
+    Returns
+    -------
+    bool
+        True when the user clicks the 'Next: Dehazing →' button to advance
+        to the dehaze step. False on all other renders.
+    """
     st.header("Step 1 — Upload")
 
     uploaded_file = st.file_uploader("Upload a Sentinel-2 TIFF", type=["tif", "tiff"])

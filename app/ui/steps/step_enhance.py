@@ -6,25 +6,57 @@ Standardisation has been removed from this step — it now lives in tile_exporte
 import streamlit as st
 import numpy as np
 from processing.enhancement import apply_clahe
+from ui.steps import render_step_nav
 
 
 def render(state: dict) -> bool:
-    """Render enhance step. Returns True when user clicks Next to advance."""
+    """Render Step 3 — Enhancement.
 
-    col_back, col_spacer, col_skip = st.columns([1, 4, 1])
-    with col_back:
-        if st.button("← Back", key="back_enhance"):
-            for k in ["enhanced_image", "global_stats", "enhance_params"]:
-                state.pop(k, None)
-            state["step"] = "dehaze"
-            st.rerun()
-    with col_skip:
-        if st.button("Skip →", key="skip_enhance"):
-            state["enhanced_image"] = state.get("dehazed_image", state["stretched_image"]).copy()
-            state["enhance_params"] = {"skipped": True}
-            state["global_stats"] = None
-            state["step"] = "chip"
-            st.rerun()
+    Reads from state
+    ----------------
+    dehazed_image : np.ndarray
+        uint8 (H, W, 3) image produced by step_dehaze (or the stretched
+        image when dehazing was skipped). Used as input to enhancement
+        and displayed in the before/after comparison.
+    stretched_image : np.ndarray
+        Fallback source used only when dehazed_image is absent (skip path).
+    enhance_params : dict
+        Parameters from the previous Apply run (if any), used to detect
+        stale-result conditions and display the last-run summary.
+
+    Writes to state
+    ---------------
+    enhanced_image : np.ndarray
+        uint8 (H, W, 3) result after CLAHE (or identity) enhancement.
+        Set on Apply Enhancement click, or copied from dehazed_image
+        when skipped.
+    enhance_params : dict
+        Enhancement method and parameters used for the last run, or
+        {'skipped': True} if the step was skipped.
+    global_stats : dict or None
+        {'mean': [r, g, b], 'std': [r, g, b]} computed over enhanced_image.
+        None when enhancement was skipped.
+    step : str
+        Set to 'dehaze' on Back click, or 'chip' on Skip click.
+
+    Returns
+    -------
+    bool
+        True when the user clicks 'Proceed to Chipping →' to advance
+        to the chip step. False on all other renders.
+    """
+    back, skip = render_step_nav("enhance")
+    if back:
+        for k in ["enhanced_image", "global_stats", "enhance_params"]:
+            state.pop(k, None)
+        state["step"] = "dehaze"
+        st.rerun()
+    if skip:
+        state["enhanced_image"] = state.get("dehazed_image", state["stretched_image"]).copy()
+        state["enhance_params"] = {"skipped": True}
+        state["global_stats"] = None
+        state["step"] = "chip"
+        st.rerun()
 
     st.header("Step 3 — Enhancement")
 
@@ -39,7 +71,9 @@ def render(state: dict) -> bool:
     if method is None:
         st.info("Select an enhancement method above. Choose 'None' to proceed without enhancement.")
 
-    # Clear stale result when the selected method differs from what was last applied
+    # Clear stale result when the selected method differs from what was last applied.
+    # After a successful Apply the stored method matches the widget value, so this
+    # condition is False on the very next render and no flickering occurs.
     if method is not None and state.get("enhance_params", {}).get("method") != method:
         state.pop("enhanced_image", None)
         state.pop("global_stats", None)
@@ -56,6 +90,10 @@ def render(state: dict) -> bool:
         st.caption("*Divides the image into a grid of this size for local histogram equalisation. Smaller grids (4) give more localised enhancement; larger grids (32) are closer to global equalisation.*")
 
     if method is not None:
+        if "enhanced_image" in state and method == "CLAHE" and state.get("enhance_params", {}).get("method") == "CLAHE":
+            if state["enhance_params"].get("clip_limit") != clip_limit or state["enhance_params"].get("tile_size") != tile_size:
+                st.warning("Parameters have changed since the last run — click Apply Enhancement to update.")
+
         if st.button("Apply Enhancement", type="primary"):
             with st.spinner("Applying enhancement..."):
                 if method == "CLAHE":
@@ -99,11 +137,6 @@ def render(state: dict) -> bool:
             st.caption(f"CLAHE  clip={p['clip_limit']}  grid={p['tile_size']}×{p['tile_size']}")
         else:
             st.info("No enhancement applied.")
-
-        # Stale result warning
-        if method is not None and method == "CLAHE" and p.get("method") == "CLAHE":
-            if p.get("clip_limit") != clip_limit or p.get("tile_size") != tile_size:
-                st.warning("Parameters have changed since the last run — click Apply Enhancement to update.")
 
         if st.button("Proceed to Chipping →", type="primary"):
             return True

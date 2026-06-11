@@ -1,3 +1,36 @@
+"""
+main.py — Streamlit entry point and step router.
+
+Session state keys
+------------------
+step : str
+    Current wizard step. One of: 'upload', 'dehaze', 'enhance', 'chip', 'review'.
+stretched_image : np.ndarray  (H, W, 3) uint8
+    Written by step_upload. Percentile-stretched true-colour composite.
+source_meta : dict
+    Written by step_upload. Rasterio metadata with CRS and Affine transform.
+upload_params : dict
+    Written by step_upload. Band indices and stretch percentiles used.
+cloud_mask : np.ndarray  (H, W) bool
+    Written by step_dehaze (live, on every threshold slider change).
+dehazed_image : np.ndarray  (H, W, 3) uint8
+    Written by step_dehaze on Run click, or copied from stretched_image on skip.
+dehaze_params : dict
+    Written by step_dehaze. DCP parameters, or {'skipped': True}.
+enhanced_image : np.ndarray  (H, W, 3) uint8
+    Written by step_enhance on Apply click, or copied from dehazed_image on skip.
+enhance_params : dict
+    Written by step_enhance. Enhancement method and params, or {'skipped': True}.
+global_stats : dict or None
+    Written by step_enhance. {'mean': [r,g,b], 'std': [r,g,b]} of enhanced_image.
+    None when enhancement was skipped.
+chip_grid : ChipGrid
+    Written by step_chip on Run Chipping click.
+chip_params : dict
+    Written by step_chip. Grid dimensions, overlap, naming, edge mode.
+chip_skipped : bool
+    Written by step_chip Skip button. True when chipping step was skipped.
+"""
 import streamlit as st
 
 from ui.steps.step_upload import render as render_upload

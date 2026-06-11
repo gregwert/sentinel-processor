@@ -8,17 +8,53 @@ preserved geospatial metadata, and a dict of intermediate stage images
 for UI display and debugging.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Tuple, Dict
 import numpy as np
 
 from .preprocess import read_sentinel_tiff, percentile_stretch
-from .dehazing import dehaze
+from .dehazing import Dehazer
 from .enhancement import apply_clahe
 
 
 @dataclass
 class PipelineConfig:
+    """Configuration for a single end-to-end pipeline run.
+
+    Fields
+    ------
+    band_indices : tuple of int
+        1-based rasterio band indices to read from the source GeoTIFF; default (1, 2, 3).
+    p_low : float
+        Lower percentile for contrast stretching; default 2.0.
+    p_high : float
+        Upper percentile for contrast stretching; default 98.0.
+    per_band_stretch : bool
+        If True, percentile stretch is applied independently per band; default False.
+    run_dehaze : bool
+        Whether to run the DCP dehazing stage; default True.
+    patch_size : int
+        Dark-channel patch size forwarded to :func:`~dehazing.dehaze`; default 15.
+    omega : float
+        Haze retention factor forwarded to :func:`~dehazing.dehaze`; default 0.95.
+    t0 : float
+        Minimum transmission clamp forwarded to :func:`~dehazing.dehaze`; default 0.1.
+    use_guided_filter : bool
+        Whether to refine the transmission map with a guided filter; default True.
+    mask_clouds : bool
+        Whether to detect and preserve cloud pixels around the dehazing step; default True.
+    cloud_brightness_thresh : float
+        Brightness threshold for cloud detection; default 0.75.
+    cloud_saturation_thresh : float
+        Saturation threshold for cloud detection; default 0.08.
+    enhancement : str
+        Post-dehazing enhancement mode. ``"clahe"`` applies CLAHE; ``"none"`` skips; default ``"clahe"``.
+    clahe_clip_limit : float
+        CLAHE clip limit forwarded to :func:`~enhancement.apply_clahe`; default 2.0.
+    clahe_tile_grid : tuple of int
+        CLAHE tile grid size forwarded to :func:`~enhancement.apply_clahe`; default (8, 8).
+    """
+
     band_indices: Tuple[int, ...] = (1, 2, 3)
     p_low: float = 2.0
     p_high: float = 98.0
@@ -38,13 +74,40 @@ class PipelineConfig:
 
 @dataclass
 class PipelineResult:
+    """Outputs produced by a completed pipeline run.
+
+    Fields
+    ------
+    image : np.ndarray
+        Shape (H, W, 3), dtype uint8. Final enhanced image ready for display or export.
+    meta : dict
+        rasterio metadata dict with CRS, transform, and output dtype/driver settings preserved.
+    stages : dict of str -> np.ndarray
+        Intermediate uint8 images keyed by stage name (``"preprocessed"``, ``"dehazed"``,
+        ``"enhanced"``), used for UI display and debugging.
+    """
+
     image: np.ndarray          # (H, W, 3) uint8 — final enhanced image
     meta: dict                 # rasterio metadata with CRS/transform preserved
     stages: Dict[str, np.ndarray]  # intermediate images keyed by stage name
 
 
 def run_pipeline(tiff_path: str, config: PipelineConfig) -> PipelineResult:
-    """Orchestrate preprocess → dehaze → enhance; return PipelineResult with stage images."""
+    """Orchestrate the preprocess → dehaze → enhance chain and return all stage outputs.
+
+    Parameters
+    ----------
+    tiff_path : str
+        Filesystem path to the source Sentinel-2 GeoTIFF.
+    config : PipelineConfig
+        Fully specified run configuration controlling every stage of the pipeline.
+
+    Returns
+    -------
+    PipelineResult
+        Container holding the final enhanced image, updated rasterio metadata,
+        and a ``stages`` dict with intermediate images for each completed stage.
+    """
     stages = {}
 
     # Stage 1: Read + stretch
@@ -55,16 +118,15 @@ def run_pipeline(tiff_path: str, config: PipelineConfig) -> PipelineResult:
 
     # Stage 2: Dehaze (optional)
     if config.run_dehaze:
-        current = dehaze(
-            current,
-            config.patch_size,
-            config.omega,
-            config.t0,
-            config.use_guided_filter,
-            config.mask_clouds,
-            config.cloud_brightness_thresh,
-            config.cloud_saturation_thresh,
-        )
+        current = Dehazer(
+            patch_size=config.patch_size,
+            omega=config.omega,
+            t0=config.t0,
+            use_guided_filter=config.use_guided_filter,
+            mask_clouds=config.mask_clouds,
+            brightness_thresh=config.cloud_brightness_thresh,
+            saturation_thresh=config.cloud_saturation_thresh,
+        ).run(current)
         stages["dehazed"] = current.copy()
 
     # Stage 3: Enhancement — supports "clahe" or "none"
