@@ -1,8 +1,8 @@
-version: "3.9"
-
 services:
   sentinel-app:
     build: .
+    container_name: sentinel-processor
+    restart: unless-stopped
     ports:
       - "8501:8501"
     volumes:
@@ -10,7 +10,22 @@ services:
       - chip_output:/tmp/chips
     environment:
       - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=2048
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   chip_output:
