@@ -14,7 +14,7 @@ import numpy as np
 
 from .preprocess import read_sentinel_tiff, percentile_stretch
 from .dehazing import dehaze
-from .enhancement import apply_clahe, apply_standardization
+from .enhancement import apply_clahe
 
 
 @dataclass
@@ -22,7 +22,7 @@ class PipelineConfig:
     band_indices: Tuple[int, ...] = (1, 2, 3)
     p_low: float = 2.0
     p_high: float = 98.0
-    per_band_stretch: bool = True
+    per_band_stretch: bool = False
     run_dehaze: bool = True
     patch_size: int = 15
     omega: float = 0.95
@@ -34,8 +34,6 @@ class PipelineConfig:
     enhancement: str = "clahe"
     clahe_clip_limit: float = 2.0
     clahe_tile_grid: Tuple[int, int] = (8, 8)
-    std_target_mean: float = 127.5
-    std_target_std: float = 45.0
 
 
 @dataclass
@@ -69,11 +67,9 @@ def run_pipeline(tiff_path: str, config: PipelineConfig) -> PipelineResult:
         )
         stages["dehazed"] = current.copy()
 
-    # Stage 3: Enhancement
+    # Stage 3: Enhancement — supports "clahe" or "none"
     if config.enhancement == "clahe":
         current = apply_clahe(current, config.clahe_clip_limit, config.clahe_tile_grid)
-    elif config.enhancement == "standardization":
-        current = apply_standardization(current, config.std_target_mean, config.std_target_std)
     stages["enhanced"] = current.copy()
 
     # Update meta for uint8 output

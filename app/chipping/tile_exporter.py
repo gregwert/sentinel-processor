@@ -19,7 +19,22 @@ from PIL import Image
 
 def _export_single_chip(args) -> str:
     """Top-level picklable worker: write one chip to disk in specified format."""
-    chip_array, chip_meta, out_path, fmt = args
+    chip_array, chip_meta, out_path, fmt, normalise, global_mean, global_std = args
+
+    if normalise and global_mean is not None and global_std is not None:
+        mean = np.array(global_mean, dtype=np.float32)
+        std = np.array(global_std, dtype=np.float32) + 1e-6
+        chip_f = chip_array.astype(np.float32)
+        normalised = (chip_f - mean) / std
+        if fmt == "npy":
+            # NPY gets raw float32 — do NOT clip to uint8
+            # Save normalised float array instead of chip_array
+            np.save(out_path, normalised)
+            return out_path
+        else:
+            # Rescale normalised float back to uint8 for visual formats
+            rescaled = normalised * 45.0 + 127.5  # approximate target distribution
+            chip_array = np.clip(rescaled, 0, 255).astype(np.uint8)
 
     if fmt == "png":
         img = Image.fromarray(chip_array.astype(np.uint8), mode="RGB")
@@ -53,7 +68,27 @@ def _export_single_chip(args) -> str:
     return out_path
 
 
-def export_chips(grid, output_dir: str, fmt: str = "png", naming: str = "rowcol"):
+def _coords_filename(chip_meta: dict, ext: str) -> str:
+    """Build a filesystem-safe chip filename from the chip's geotransform origin."""
+    t = chip_meta["transform"]
+    crs = chip_meta.get("crs")
+    if crs is not None and crs.is_geographic:
+        lat, lon = t.f, t.c
+        lat_s = f"{abs(lat):.4f}".replace(".", "p")
+        lon_s = f"{abs(lon):.4f}".replace(".", "p")
+        lat_dir = "N" if lat >= 0 else "S"
+        lon_dir = "E" if lon >= 0 else "W"
+        return f"chip_{lat_s}{lat_dir}_{lon_s}{lon_dir}{ext}"
+    else:
+        # Projected CRS (UTM etc) — integer metres, no decimal noise
+        north = int(round(t.f))
+        east = int(round(t.c))
+        north_dir = "N" if north >= 0 else "S"
+        east_dir = "E" if east >= 0 else "W"
+        return f"chip_{abs(north)}{north_dir}_{abs(east)}{east_dir}{ext}"
+
+
+def export_chips(grid, output_dir: str, fmt: str = "png", naming: str = "rowcol", normalise: bool = False, global_stats=None):
     """Export all chips via ProcessPoolExecutor; return list of written paths."""
     os.makedirs(output_dir, exist_ok=True)
 
@@ -66,7 +101,10 @@ def export_chips(grid, output_dir: str, fmt: str = "png", naming: str = "rowcol"
     ext = ext_map.get(fmt, ".png")
 
     # Import here to avoid circular import issues at module level
-    from app.chipping.gdal_chipper import get_chip
+    from chipping.gdal_chipper import get_chip
+
+    global_mean = global_stats.get("mean") if global_stats else None
+    global_std = global_stats.get("std") if global_stats else None
 
     args_list = []
     for index in range(grid.total):
@@ -77,13 +115,12 @@ def export_chips(grid, output_dir: str, fmt: str = "png", naming: str = "rowcol"
         if naming == "rowcol":
             fname = f"chip_r{row_idx:04d}_c{col_idx:04d}{ext}"
         elif naming == "coords":
-            t = chip_meta["transform"]
-            fname = f"chip_{t.c:.2f}_{t.f:.2f}{ext}"
+            fname = _coords_filename(chip_meta, ext)
         else:
             fname = f"chip_r{row_idx:04d}_c{col_idx:04d}{ext}"
 
         out_path = os.path.join(output_dir, fname)
-        args_list.append((chip_array, chip_meta, out_path, fmt))
+        args_list.append((chip_array, chip_meta, out_path, fmt, normalise, global_mean, global_std))
 
     workers = os.cpu_count() or 4
     ctx = multiprocessing.get_context("spawn")

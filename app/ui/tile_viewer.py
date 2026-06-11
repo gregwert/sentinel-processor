@@ -8,7 +8,6 @@ module and provides format selection and download controls.
 
 import streamlit as st
 import numpy as np
-from PIL import Image
 
 from chipping.gdal_chipper import get_chip
 from chipping.tile_exporter import export_chips, zip_export
@@ -58,18 +57,14 @@ def render_tile_viewer(grid, page_size: int = 16):
     cols = st.columns(COLS_PER_ROW)
     for i, chip_idx in enumerate(range(start, end)):
         chip_arr, chip_meta = get_chip(grid, chip_idx)
-        # Downsample to thumbnail for display performance
-        thumb = Image.fromarray(chip_arr).resize((128, 128), Image.LANCZOS)
         row_i = chip_meta["row_idx"]
         col_i = chip_meta["col_idx"]
         col = cols[i % COLS_PER_ROW]
         with col:
-            st.image(thumb, caption=f"r{row_i:04d}_c{col_i:04d}", use_column_width=True)
-            with st.expander("Full res"):
-                st.image(chip_arr, use_column_width=True)
+            st.image(chip_arr, caption=f"r{row_i:04d}_c{col_i:04d}", use_column_width=True)
 
 
-def render_export_controls(grid) -> "bytes | None":
+def render_export_controls(grid, global_stats=None) -> "bytes | None":
     """Render format selector + export button; return zip bytes when triggered."""
     st.subheader("Export Chips")
 
@@ -81,11 +76,22 @@ def render_export_controls(grid) -> "bytes | None":
 
     st.caption(_FORMAT_DESCRIPTIONS.get(fmt, ""))
 
+    normalise = False
+    if global_stats is not None:
+        normalise = st.checkbox(
+            "Normalise chips (z-score)",
+            value=False,
+            help="Apply global-image z-score normalisation at export time. "
+                 "Useful for ML pipeline inputs. NPY format exports raw float32.",
+            key="export_normalise",
+        )
+
     if st.button("Export All Chips", type="primary"):
         with st.spinner(f"Exporting {grid.total} chips as {fmt.upper()}..."):
             import tempfile
             with tempfile.TemporaryDirectory() as tmp_dir:
-                paths = export_chips(grid, tmp_dir, fmt=fmt, naming=naming)
+                paths = export_chips(grid, tmp_dir, fmt=fmt, naming=naming,
+                                     normalise=normalise, global_stats=global_stats)
                 zip_bytes = zip_export(paths)
         return zip_bytes
 

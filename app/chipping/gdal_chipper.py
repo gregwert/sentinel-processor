@@ -22,16 +22,33 @@ class ChipGrid:
     chip_h: int
     n_rows: int
     n_cols: int
+    edge_mode: str = "pad"
 
     @property
     def total(self):
         return len(self.windows)
 
 
-def compute_chip_grid(img_w, img_h, chip_w, chip_h, overlap=0.0) -> List[Tuple[int, int, int, int]]:
+def compute_chip_grid(img_w, img_h, chip_w, chip_h, overlap=0.0, edge_mode="pad") -> List[Tuple[int, int, int, int]]:
     """Return list of (col_off, row_off, w, h) windows covering the image."""
     step_x = max(int(chip_w * (1 - overlap)), 1)
     step_y = max(int(chip_h * (1 - overlap)), 1)
+
+    if edge_mode == "overlap":
+        windows = []
+        col_offs = list(range(0, img_w, step_x))
+        row_offs = list(range(0, img_h, step_y))
+        seen = set()
+        for row_off in row_offs:
+            for col_off in col_offs:
+                # Clamp so chip stays within image bounds — full chip size always
+                actual_col = min(col_off, max(0, img_w - chip_w))
+                actual_row = min(row_off, max(0, img_h - chip_h))
+                window = (actual_col, actual_row, chip_w, chip_h)
+                if window not in seen:
+                    seen.add(window)
+                    windows.append(window)
+        return windows
 
     windows = []
     row = 0
@@ -86,10 +103,10 @@ def get_chip(grid: ChipGrid, index: int) -> Tuple[np.ndarray, dict]:
     return chip_raw, chip_meta
 
 
-def build_chip_grid(processed_img, source_meta, chip_w, chip_h, overlap=0.0) -> ChipGrid:
+def build_chip_grid(processed_img, source_meta, chip_w, chip_h, overlap=0.0, edge_mode="pad") -> ChipGrid:
     """Build ChipGrid from processed image; stores reference not copies."""
     H, W, C = processed_img.shape
-    windows = compute_chip_grid(W, H, chip_w, chip_h, overlap)
+    windows = compute_chip_grid(W, H, chip_w, chip_h, overlap, edge_mode)
     n_cols = len([wnd for wnd in windows if wnd[1] == 0])
     n_rows = len(set(wnd[1] for wnd in windows))
     return ChipGrid(
@@ -100,4 +117,5 @@ def build_chip_grid(processed_img, source_meta, chip_w, chip_h, overlap=0.0) -> 
         chip_h=chip_h,
         n_rows=n_rows,
         n_cols=n_cols,
+        edge_mode=edge_mode,
     )
