@@ -366,7 +366,7 @@ def render(state: dict) -> bool:
 
         with st.expander("View chips", expanded=True):
             from ui.tile_viewer import render_tile_viewer
-            render_tile_viewer(state["chip_grid"])
+            render_tile_viewer(state["chip_grid"], quality=state.get("chip_quality"))
 
         st.divider()
     else:

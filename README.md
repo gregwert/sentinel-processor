@@ -266,13 +266,13 @@ Test coverage:
 
 | Module | What is tested |
 |---|---|
-| `test_preprocess.py` | Band selection, percentile stretch, flat-band edge case |
-| `test_dehazing.py` | DCP end-to-end, transmission map, radiance recovery, cloud detection |
+| `test_preprocess.py` | Percentile stretch output properties, flat-band edge case, per-band vs global mode, TIFF read and metadata |
+| `test_dehazing.py` | DCP end-to-end, dark channel, transmission map, guided filter refinement, radiance recovery, atmospheric light estimation, cloud detection and pixel restoration |
 | `test_enhancement.py` | CLAHE contrast increase, Gray World channel balancing |
-| `test_chipping.py` | Grid geometry, overlap/pad edge modes, chip export formats, rejection filtering |
-| `test_reference_norm.py` | CDF computation, histogram matching, linear normalisation, picklability |
-| `test_chip_filter.py` | Cloud and variance quality filters, partition correctness |
-| `test_manifest.py` | Geographic bounds, manifest row fields, CSV round-trip |
-| `test_annotation_export.py` | COCO JSON structure, YOLO label files, rejection handling |
-| `test_pipeline.py` | End-to-end pipeline, stage keys, error cases |
-| `test_utils.py` | `_yaml_safe` tuple conversion and YAML round-trip |
+| `test_chipping.py` | Grid geometry, chip affine transforms, overlap/pad edge modes, coordinate-based chip naming (geographic and projected CRS), chip export formats (PNG, JPEG, GeoTIFF, NPY), rejection filtering |
+| `test_reference_norm.py` | Single and multi-image stats, CDF monotonicity, histogram matching, linear normalisation, degenerate reference band, error cases, picklability |
+| `test_chip_filter.py` | Chip stats (cloud fraction, variance, edge chip denominator), cloud and variance filter combinations, partition correctness |
+| `test_manifest.py` | Geographic bounds computation, pixel bounding boxes, manifest row fields and rowcol naming, CSV header and round-trip |
+| `test_annotation_export.py` | COCO JSON structure (image entries, geo_bbox, 1-based IDs, rowcol naming), YOLO label files and dataset.yaml, rejection handling |
+| `test_pipeline.py` | End-to-end pipeline output, no-dehaze mode, error cases (invalid band, missing file) |
+| `test_utils.py` | `_yaml_safe` tuple-to-list conversion (top-level, nested, scalars, YAML round-trip) |

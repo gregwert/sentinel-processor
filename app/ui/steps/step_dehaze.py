@@ -110,7 +110,7 @@ def render(state: dict) -> bool:
 
         mask_clouds = st.checkbox(
             "Cloud-adaptive atmospheric light",
-            value=True,
+            value=_dp.get("mask_clouds", True),
         )
         st.caption("*Detects cloud pixels and excludes them when estimating atmospheric light. Without this, clouds bias the haze estimate and degrade results over land.*")
 
