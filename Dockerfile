@@ -29,4 +29,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 ENTRYPOINT ["streamlit", "run", "app/main.py", \
     "--server.port=8501", \
     "--server.address=0.0.0.0", \
-    "--server.maxUploadSize=2048"]
+    "--server.maxUploadSize=2048", \
+    "--server.enableXsrfProtection=false"]

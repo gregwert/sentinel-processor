@@ -43,62 +43,26 @@ sentinel-processor/
 ```
 
 ---
+## Deployment
 
-## Local Setup (Windows)
+To deploy the app either build and deploy the docker image or create the necessary python environment and launch the app.
+Instructions for each are below.
 
-### Prerequisites
+Once deployed, the app is available at [**http://localhost:8501**](http://localhost:8501).
 
-- Python 3.11 ([python.org](https://www.python.org/downloads/))
-- Git (to clone the repo)
+### Deploy With Docker
 
-> **Note on GDAL:** the `rasterio` Windows wheel bundles GDAL internally — no separate GDAL system install is required.
-
-### Steps
-
-```bat
-git clone <repo-url>
-cd sentinel-processor
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### Running
-
-```bat
-python launch.py
-```
-
-Or double-click `run.bat`.
-
-The app opens at **http://localhost:8501**.
-
-`launch.py` patches Python's SSL certificate loader before starting Streamlit. This works around an intermittent Windows issue where malformed certificates in the OS certificate store cause Tornado (Streamlit's HTTP server) to crash on startup.
-
-### Optional: Conda
-
-```bat
-conda create -n sentinel-processor python=3.11 -y
-conda activate sentinel-processor
-pip install -r requirements.txt
-python launch.py
-```
-
----
-
-## Docker Deployment
-
-### Prerequisites
+#### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose plugin)
 
-### Build and run
+#### Build and run
 
 ```bash
 docker compose up --build
 ```
 
-The app will be available at **http://localhost:8501**.
+Then visit [**http://localhost:8501**](http://localhost:8501)
 
 On subsequent starts (no code changes):
 
@@ -112,35 +76,47 @@ To stop:
 docker compose down
 ```
 
-### What the container does
+### Local Deployment via CLI
 
-| Setting | Value |
-|---|---|
-| Base image | `osgeo/gdal:ubuntu-small-3.8.4` |
-| Exposed port | `8501` |
-| Max upload size | `2048 MB` |
-| Restart policy | `unless-stopped` |
-| Health check | `GET /stcore/health` every 30 s |
+#### Prerequisites
 
-The Compose file mounts two paths:
+- Python 3.11 ([python.org](https://www.python.org/downloads/))
 
-| Mount | Purpose |
-|---|---|
-| `./sample_data` → `/app/sample_data` (read-only) | Optional sample GeoTIFFs — place test files here to access them via the upload step |
-| Named volume `chip_output` → `/tmp/chips` | Scratch space used during chip export |
+> **Note on GDAL:** the `rasterio` Windows wheel bundles GDAL internally — no separate GDAL system install is required.
 
-Create the sample data directory if you want to use it:
+#### Setup Python Environment
+Run the folliwing commands to create a conda environment for the app.
 
-```bash
-mkdir sample_data
+##### Venv
+
+```bat
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-### Building the image without Compose
+##### (Alt) Conda
 
-```bash
-docker build -t sentinel-processor .
-docker run -p 8501:8501 sentinel-processor
+```bat
+conda create -n sentinel-processor python=3.11 -y
+conda activate sentinel-processor
+pip install -r requirements.txt
 ```
+
+#### Running
+To run the app, from the command line run
+
+```bat
+python launch.py
+```
+or
+
+```bat
+run.bat
+```
+
+Then visit [**http://localhost:8501**](http://localhost:8501)
+
 
 ---
 

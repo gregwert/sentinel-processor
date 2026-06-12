@@ -56,15 +56,17 @@ def render(state: dict) -> bool:
     if uploaded_file is not None:
         with st.expander("Band & display settings"):
             band_r = st.number_input("Red band", min_value=1, max_value=12, value=1)
+            st.caption("*Band index to map to the red channel. Sentinel-2 L2A band 4 is the red reflectance band.*")
             band_g = st.number_input("Green band", min_value=1, max_value=12, value=2)
+            st.caption("*Band index to map to the green channel. Sentinel-2 L2A band 3 is the green reflectance band.*")
             band_b = st.number_input("Blue band", min_value=1, max_value=12, value=3)
+            st.caption("*Band index to map to the blue channel. Sentinel-2 L2A band 2 is the blue reflectance band.*")
             p_low = st.slider("Low percentile clip", 0.0, 10.0, 2.0, 0.5)
+            st.caption("*Pixels below this brightness percentile are clipped to black. Raise to brighten the image by discarding the darkest values (shadows, deep water). 2.0 is a good default.*")
             p_high = st.slider("High percentile clip", 90.0, 100.0, 98.0, 0.5)
-            per_band = st.checkbox(
-                "Per-band normalisation",
-                value=False,
-                help="Normalise each band independently. Can cause colour casts on Sentinel-2 true-colour composites — leave off by default.",
-            )
+            st.caption("*Pixels above this brightness percentile are clipped to white. Lower to brighten the image by discarding the brightest values (clouds, sunglint). 98.0 is a good default.*")
+            per_band = st.checkbox("Per-band normalisation", value=False)
+            st.caption("*Normalise each band independently before combining into RGB. Can cause colour casts on Sentinel-2 true-colour composites because the bands are stretched to different ranges — leave off unless the image looks very green or very red.*")
 
         band_indices = (int(band_r), int(band_g), int(band_b))
         params_key = str((uploaded_file.file_id, band_r, band_g, band_b, p_low, p_high, per_band))
