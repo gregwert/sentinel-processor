@@ -180,14 +180,19 @@ def render(state: dict) -> bool:
     if "enhanced_image" in state:
         st.divider()
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.image(state["dehazed_image"], caption="Before", use_column_width=True)
+            st.image(state["stretched_image"], caption="Original", use_column_width=True)
+            st.caption(
+                f"μ={state['stretched_image'].mean():.1f}  σ={state['stretched_image'].std():.1f}"
+            )
+        with col2:
+            st.image(state["dehazed_image"], caption="Dehazed", use_column_width=True)
             st.caption(
                 f"μ={state['dehazed_image'].mean():.1f}  σ={state['dehazed_image'].std():.1f}"
             )
-        with col2:
-            st.image(state["enhanced_image"], caption="After Enhancement", use_column_width=True)
+        with col3:
+            st.image(state["enhanced_image"], caption="Enhanced", use_column_width=True)
             st.caption(
                 f"μ={state['enhanced_image'].mean():.1f}  σ={state['enhanced_image'].std():.1f}"
             )

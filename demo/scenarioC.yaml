@@ -1,0 +1,31 @@
+upload:
+  band_indices:
+  - 1
+  - 2
+  - 3
+  p_low: 2.0
+  p_high: 98.0
+  per_band_stretch: false
+dehazing:
+  omega: 0.8
+  t0: 0.1
+  patch_size: 19
+  use_guided: true
+  mask_clouds: true
+  brightness_thresh: 0.79
+  saturation_thresh: 0.06
+enhancement:
+  method: CLAHE
+  clip_limit: 2.0
+  tile_size: 4
+  gray_world: false
+  ref_norm: true
+  ref_norm_method: Histogram matching
+chipping:
+  unit: Pixels
+  square: true
+  chip_w: 256
+  chip_h: 256
+  overlap: 0.0
+  naming: coords
+  edge_mode: pad

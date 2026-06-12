@@ -1,0 +1,31 @@
+upload:
+  band_indices:
+  - 1
+  - 2
+  - 3
+  p_low: 2.0
+  p_high: 98.0
+  per_band_stretch: false
+dehazing:
+  omega: 0.95
+  t0: 0.1
+  patch_size: 15
+  use_guided: true
+  mask_clouds: false
+  brightness_thresh: 0.75
+  saturation_thresh: 0.08
+enhancement:
+  method: None
+  clip_limit: null
+  tile_size: null
+  gray_world: false
+  ref_norm: true
+  ref_norm_method: Linear (mean/std)
+chipping:
+  unit: Metres
+  square: true
+  chip_w: 418
+  chip_h: 418
+  overlap: 0.0
+  naming: coords
+  edge_mode: overlap
