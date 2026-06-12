@@ -16,24 +16,19 @@ def render_cloud_composite(
 ) -> Image.Image:
     """Render a semi-transparent cloud mask overlay on the source image.
 
-    Parameters
-    ----------
-    img_uint8 : np.ndarray
-        Shape (H, W, 3), dtype uint8. Source image to overlay on.
-    cloud_mask : np.ndarray
-        Shape (H, W), dtype bool. True where cloud pixels are detected.
-    overlay_colour : tuple of int, optional
-        RGB colour for the cloud overlay. Default (255, 0, 0) is red.
-    alpha : float, optional
-        Opacity of the cloud overlay layer. 0.0 = invisible, 1.0 = opaque.
-    max_display_px : int, optional
-        Long edge of the output image is capped at this pixel count for
-        display performance. Default 800.
+    Args:
+        img_uint8 (np.ndarray): Shape (H, W, 3), dtype uint8. Source image to overlay on.
+        cloud_mask (np.ndarray): Shape (H, W), dtype bool. True where cloud pixels are
+            detected.
+        overlay_colour (tuple of int, optional): RGB colour for the cloud overlay.
+            Default (255, 0, 0) is red.
+        alpha (float, optional): Opacity of the cloud overlay layer. 0.0 = invisible,
+            1.0 = opaque.
+        max_display_px (int, optional): Long edge of the output image is capped at this
+            pixel count for display performance. Default 800.
 
-    Returns
-    -------
-    PIL.Image
-        RGBA composite image ready for st.image().
+    Returns:
+        PIL.Image: RGBA composite image ready for st.image().
     """
     h, w = img_uint8.shape[:2]
     scale = min(max_display_px / max(h, w), 1.0)
@@ -68,20 +63,16 @@ def render_cloud_composite(
 def compute_cloud_stats(cloud_mask: np.ndarray) -> dict:
     """Compute summary statistics for a cloud detection mask.
 
-    Parameters
-    ----------
-    cloud_mask : np.ndarray
-        Shape (H, W), dtype bool. True where cloud pixels are detected.
+    Args:
+        cloud_mask (np.ndarray): Shape (H, W), dtype bool. True where cloud pixels are
+            detected.
 
-    Returns
-    -------
-    dict
-        Dictionary with keys:
-
-        - ``cloud_pct`` : float — percentage of pixels classified as cloud,
-          rounded to one decimal place.
-        - ``cloud_px`` : int — absolute count of cloud pixels.
-        - ``total_px`` : int — total pixel count in the mask.
+    Returns:
+        dict: Dictionary with keys:
+            ``cloud_pct`` (float): percentage of pixels classified as cloud, rounded to
+            one decimal place.
+            ``cloud_px`` (int): absolute count of cloud pixels.
+            ``total_px`` (int): total pixel count in the mask.
     """
     total_px = cloud_mask.size
     cloud_px = int(cloud_mask.sum())

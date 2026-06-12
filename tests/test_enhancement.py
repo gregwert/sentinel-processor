@@ -1,13 +1,12 @@
 """
 tests/test_enhancement.py
 
-Tests for app.processing.enhancement — apply_clahe and apply_standardization.
+Tests for app.processing.enhancement — apply_clahe and apply_gray_world.
 """
 
 import numpy as np
-import pytest
 
-from app.processing.enhancement import apply_clahe, apply_standardization
+from app.processing.enhancement import apply_clahe, apply_gray_world
 
 
 def make_low_contrast_image(h=128, w=128):
@@ -17,55 +16,49 @@ def make_low_contrast_image(h=128, w=128):
     return img
 
 
+# Module-level images shared across sanity tests.
+_IMG_CLAHE = make_low_contrast_image()
+_IMG_GW = make_low_contrast_image()
+
+
 # ---------------------------------------------------------------------------
 # apply_clahe tests
 # ---------------------------------------------------------------------------
 
-def test_clahe_output_dtype():
-    img = make_low_contrast_image()
-    result = apply_clahe(img)
+def test_clahe_output_properties():
+    """apply_clahe returns uint8 with correct shape, bounded values."""
+    result = apply_clahe(_IMG_CLAHE)
     assert result.dtype == np.uint8
-
-
-def test_clahe_output_shape():
-    img = make_low_contrast_image(64, 96)
-    result = apply_clahe(img)
-    assert result.shape == img.shape
-
-
-def test_clahe_output_range():
-    img = make_low_contrast_image()
-    result = apply_clahe(img)
+    assert result.shape == _IMG_CLAHE.shape
     assert int(result.min()) >= 0
     assert int(result.max()) <= 255
 
 
 def test_clahe_increases_contrast():
     """CLAHE should increase the standard deviation of a low-contrast image."""
-    img = make_low_contrast_image()
-    result = apply_clahe(img)
-    assert result.astype(np.float32).std() > img.astype(np.float32).std()
+    result = apply_clahe(_IMG_CLAHE)
+    assert result.astype(np.float32).std() > _IMG_CLAHE.astype(np.float32).std()
 
 
 # ---------------------------------------------------------------------------
-# apply_standardization tests
+# apply_gray_world tests
 # ---------------------------------------------------------------------------
 
-def test_standardization_output_dtype():
-    img = make_low_contrast_image()
-    result = apply_standardization(img)
+def test_gray_world_output_properties():
+    """apply_gray_world returns uint8 with correct shape, bounded values."""
+    result = apply_gray_world(_IMG_GW)
     assert result.dtype == np.uint8
-
-
-def test_standardization_output_range():
-    img = make_low_contrast_image()
-    result = apply_standardization(img)
+    assert result.shape == _IMG_GW.shape
     assert int(result.min()) >= 0
     assert int(result.max()) <= 255
 
 
-def test_standardization_mean_approx():
-    """Output mean should be within 20 of the target mean (127.5)."""
-    img = make_low_contrast_image()
-    result = apply_standardization(img, target_mean=127.5, target_std=45.0)
-    assert abs(result.astype(np.float32).mean() - 127.5) < 20
+def test_gray_world_balances_channels():
+    """Gray World should reduce the spread of per-channel means."""
+    rng = np.random.default_rng(0)
+    img = rng.integers(0, 256, (64, 64, 3), dtype=np.uint8)
+    img[:, :, 0] = (img[:, :, 0] * 0.3).astype(np.uint8)  # heavily biased red
+    result = apply_gray_world(img)
+    in_means = img.astype(np.float32).mean(axis=(0, 1))
+    out_means = result.astype(np.float32).mean(axis=(0, 1))
+    assert out_means.std() < in_means.std()

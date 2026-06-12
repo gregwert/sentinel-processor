@@ -11,8 +11,14 @@ import numpy as np
 from typing import Dict
 
 
-def render_stage_preview(stages: Dict[str, np.ndarray]):
-    """Render 3-column before/after stage comparison."""
+def render_stage_preview(stages: Dict[str, np.ndarray]) -> None:
+    """Render a 3-column before/after stage comparison in Streamlit.
+
+    Args:
+        stages: Dict mapping stage name to a uint8 (H, W, 3) array.
+            Required keys: 'preprocessed', 'enhanced'.
+            Optional key: 'dehazed' — falls back to 'preprocessed' when absent.
+    """
     st.subheader("Processing Stages")
 
     col1, col2, col3 = st.columns(3)

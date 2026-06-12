@@ -48,13 +48,14 @@ def render(state: dict) -> bool:
     """
     back, skip = render_step_nav("chip")
     if back:
-        for k in ["chip_grid", "chip_params", "chip_skipped"]:
+        for k in ["chip_grid", "chip_params", "chip_skipped", "chip_quality"]:
             state.pop(k, None)
         state["step"] = "enhance"
         st.rerun()
     if skip:
         state["chip_skipped"] = True
         state.pop("chip_grid", None)
+        state.pop("chip_quality", None)
         state["step"] = "review"
         st.rerun()
 
@@ -67,6 +68,46 @@ def render(state: dict) -> bool:
         grid = state["chip_grid"]
         st.success(f"Chipping complete — {grid.total} chips  ({grid.n_rows} rows × {grid.n_cols} cols)")
 
+        from chipping.chip_filter import apply_chip_filters
+
+        with st.expander("Quality Filters", expanded=False):
+            enable_cloud = st.toggle("Cloud coverage filter", value=False, key="qf_cloud_enable")
+            if enable_cloud and "cloud_mask" not in state:
+                st.warning("No cloud mask available — run dehazing with cloud masking enabled.")
+            cloud_thresh = st.slider("Max cloud fraction", 0.0, 1.0, 0.30, 0.01,
+                                     key="qf_cloud_thresh", disabled=not enable_cloud)
+            st.caption("*Reject chips where more than this fraction of pixels are detected as cloud.*")
+            enable_var = st.toggle("Variance filter", value=False, key="qf_var_enable")
+            var_thresh = st.slider("Min pixel variance", 0.0, 2000.0, 100.0, 10.0,
+                                   key="qf_var_thresh", disabled=not enable_var)
+            st.caption("*Reject chips with very low pixel variance — catches black-border padding and featureless areas.*")
+            show_rejected = st.checkbox("Show rejected chips in tile viewer", value=False,
+                                        key="qf_show_rejected")
+
+        if enable_cloud or enable_var:
+            accepted, rejected, chip_stats = apply_chip_filters(
+                state["chip_grid"],
+                cloud_mask=state.get("cloud_mask"),
+                cloud_thresh=cloud_thresh,
+                variance_thresh=var_thresh,
+                enable_cloud_filter=enable_cloud,
+                enable_variance_filter=enable_var,
+            )
+            state["chip_quality"] = {
+                "accepted": accepted,
+                "rejected": rejected,
+                "stats": chip_stats,
+                "cloud_thresh": cloud_thresh,
+                "variance_thresh": var_thresh,
+                "enable_cloud_filter": enable_cloud,
+                "enable_variance_filter": enable_var,
+                "show_rejected": show_rejected,
+            }
+            if rejected:
+                st.caption(f"Filters active: {len(accepted)} accepted · {len(rejected)} rejected")
+        else:
+            state.pop("chip_quality", None)
+
         cp = state.get("chip_params", {})
         overlay_img = render_grid_composite(
             state["enhanced_image"], grid.windows, img_w, img_h,
@@ -77,13 +118,14 @@ def render(state: dict) -> bool:
 
         if st.button("Re-chip", key="rechip"):
             state.pop("chip_grid", None)
+            state.pop("chip_quality", None)
             st.rerun()
 
         st.divider()
 
         # Inline tile viewer
         from ui.tile_viewer import render_tile_viewer
-        render_tile_viewer(grid)
+        render_tile_viewer(grid, quality=state.get("chip_quality"))
 
         st.divider()
 
@@ -93,18 +135,35 @@ def render(state: dict) -> bool:
         return False
 
     # Phase A — grid configuration and overlay (before chip_grid exists)
+    _cp = state.get("chip_params") or {}
+
     unit = st.radio("Chip size unit", ["Pixels", "Metres"], horizontal=True)
     square = st.checkbox("Square chips", value=True)
 
     approx_warning = False
 
+    # Only seed pixel dimensions from saved params when the saved unit also was Pixels
+    _seed_pixels = _cp.get("unit") == "Pixels"
+
     if unit == "Pixels":
         if square:
-            chip_w = st.number_input("Chip size (px)", 64, 2048, 256, 64)
+            chip_w = st.number_input(
+                "Chip size (px)", 64, 2048,
+                _cp.get("chip_w", 256) if _seed_pixels else 256,
+                64,
+            )
             chip_h = chip_w
         else:
-            chip_w = st.number_input("Chip width (px)", 64, 2048, 256, 64)
-            chip_h = st.number_input("Chip height (px)", 64, 2048, 256, 64)
+            chip_w = st.number_input(
+                "Chip width (px)", 64, 2048,
+                _cp.get("chip_w", 256) if _seed_pixels else 256,
+                64,
+            )
+            chip_h = st.number_input(
+                "Chip height (px)", 64, 2048,
+                _cp.get("chip_h", 256) if _seed_pixels else 256,
+                64,
+            )
     else:
         if square:
             chip_size_m = st.number_input("Chip size (m)", 100.0, 50000.0, 1000.0, 100.0)
@@ -120,10 +179,13 @@ def render(state: dict) -> bool:
         if approx_warning:
             st.warning("CRS is geographic — metre conversion is approximate.")
 
-    overlap = st.slider("Overlap fraction", 0.0, 0.90, 0.0, 0.05)
+    overlap = st.slider("Overlap fraction", 0.0, 0.90, _cp.get("overlap", 0.0), 0.05)
+
+    _edge_options = ["pad", "overlap"]
     edge_mode = st.radio(
         "Edge chip handling",
-        ["pad", "overlap"],
+        _edge_options,
+        index=_edge_options.index(_cp.get("edge_mode", "pad")),
         format_func=lambda x: {
             "pad": "Pad with black (preserve exact grid)",
             "overlap": "Overlap with adjacent (no black borders)",
@@ -132,7 +194,13 @@ def render(state: dict) -> bool:
         help="'Pad' fills edge chips that don't fit fully with black pixels. "
              "'Overlap' shifts edge chips inward so they fully overlap with their neighbour — all chips are full size, no black borders.",
     )
-    naming = st.selectbox("Chip naming", ["coords", "rowcol"])
+
+    _naming_options = ["coords", "rowcol"]
+    naming = st.selectbox(
+        "Chip naming",
+        _naming_options,
+        index=_naming_options.index(_cp.get("naming", "coords")),
+    )
 
     windows = compute_chip_grid(img_w, img_h, int(chip_w), int(chip_h), overlap, edge_mode)
     # n_cols: windows whose row_off==0 are all in the first row, one per column.

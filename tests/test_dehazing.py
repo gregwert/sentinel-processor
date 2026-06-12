@@ -5,7 +5,6 @@ Tests for app.processing.dehazing — dark channel prior pipeline functions.
 """
 
 import numpy as np
-import pytest
 
 from app.processing.dehazing import (
     detect_clouds_simple,
@@ -27,27 +26,16 @@ def make_hazy_image(h=128, w=128, value=180):
 # dehaze() end-to-end tests
 # ---------------------------------------------------------------------------
 
-def test_dehaze_output_dtype():
-    img = make_hazy_image()
-    result = dehaze(img)
-    assert result.dtype == np.uint8
+def test_dehaze_output_properties():
+    """Output has same shape as input, correct dtype, bounded values, and no NaN.
 
-
-def test_dehaze_output_shape():
+    Uses a non-square image (64×96) to confirm H and W are not swapped.
+    """
     img = make_hazy_image(64, 96)
     result = dehaze(img)
+    assert result.dtype == np.uint8
     assert result.shape == img.shape
-
-
-def test_dehaze_no_nan():
-    img = make_hazy_image()
-    result = dehaze(img)
     assert not np.isnan(result.astype(np.float32)).any()
-
-
-def test_dehaze_values_in_range():
-    img = make_hazy_image()
-    result = dehaze(img)
     assert int(result.min()) >= 0
     assert int(result.max()) <= 255
 
@@ -149,3 +137,87 @@ def test_dark_channel_shape():
     img_f32 = np.random.rand(h, w, 3).astype(np.float32)
     dc = dark_channel(img_f32)
     assert dc.shape == (h, w)
+
+
+# ---------------------------------------------------------------------------
+# transmission_map tests
+# ---------------------------------------------------------------------------
+
+def test_transmission_map_shape_and_dtype():
+    """transmission_map returns float32 with shape (H, W)."""
+    h, w = 64, 64
+    img_f32 = np.random.rand(h, w, 3).astype(np.float32)
+    A = np.array([0.9, 0.85, 0.88], dtype=np.float32)
+    t = transmission_map(img_f32, A)
+    assert t.shape == (h, w)
+    assert t.dtype == np.float32
+
+
+def test_transmission_map_values_in_range():
+    """Transmission values must lie in (0.0, 1.0] — no zeros or values above 1."""
+    rng = np.random.default_rng(7)
+    img_f32 = rng.random((64, 64, 3)).astype(np.float32)
+    A = np.array([0.8, 0.8, 0.8], dtype=np.float32)
+    t = transmission_map(img_f32, A, patch_size=5, omega=0.95)
+    assert float(t.min()) > 0.0
+    assert float(t.max()) <= 1.0 + 1e-5  # small tolerance for float arithmetic
+
+
+# ---------------------------------------------------------------------------
+# recover_scene_radiance tests
+# ---------------------------------------------------------------------------
+
+def test_recover_scene_radiance_shape_and_dtype():
+    """Output shape and dtype must match the input image."""
+    h, w = 48, 64
+    img_f32 = np.random.rand(h, w, 3).astype(np.float32)
+    t = np.full((h, w), 0.5, dtype=np.float32)
+    A = np.array([0.9, 0.85, 0.88], dtype=np.float32)
+    J = recover_scene_radiance(img_f32, t, A)
+    assert J.shape == img_f32.shape
+    assert J.dtype == np.float32
+
+
+def test_recover_scene_radiance_t0_clamp_no_inf_nan():
+    """Very low transmission (near zero) must not produce infinity or NaN after t0 clamping."""
+    h, w = 32, 32
+    img_f32 = np.full((h, w, 3), 0.5, dtype=np.float32)
+    # Transmission nearly zero — without t0 clamping this would explode
+    t = np.full((h, w), 1e-6, dtype=np.float32)
+    A = np.array([0.8, 0.8, 0.8], dtype=np.float32)
+    J = recover_scene_radiance(img_f32, t, A, t0=0.1)
+    assert not np.isnan(J).any(), "NaN found in recovered radiance"
+    assert not np.isinf(J).any(), "Inf found in recovered radiance"
+
+
+# ---------------------------------------------------------------------------
+# guided_filter_transmission tests
+# ---------------------------------------------------------------------------
+
+def test_guided_filter_transmission_shape_and_range():
+    """Refined transmission must have same shape as input and values in [0, 1]."""
+    h, w = 64, 64
+    rng = np.random.default_rng(99)
+    guide = rng.random((h, w)).astype(np.float32)
+    raw_t = rng.random((h, w)).astype(np.float32)
+    refined = guided_filter_transmission(guide, raw_t)
+    assert refined.shape == (h, w)
+    assert float(refined.min()) >= 0.0 - 1e-4
+    assert float(refined.max()) <= 1.0 + 1e-4
+
+
+# ---------------------------------------------------------------------------
+# detect_clouds_simple with mixed image
+# ---------------------------------------------------------------------------
+
+def test_detect_clouds_simple_mixed_image_fraction():
+    """Half-cloud / half-dark image should yield a cloud fraction between 0.1 and 0.9."""
+    h, w = 64, 64
+    img = np.zeros((h, w, 3), dtype=np.uint8)
+    # Top half: bright white — cloud
+    img[: h // 2, :, :] = 230
+    # Bottom half: dark vegetation — not cloud
+    img[h // 2 :, :, :] = [25, 70, 25]
+    mask = detect_clouds_simple(img)
+    fraction = mask.mean()
+    assert 0.1 < fraction < 0.9, f"Cloud fraction {fraction:.3f} not in expected range (0.1, 0.9)"

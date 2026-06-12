@@ -17,30 +17,22 @@ import rasterio.transform
 class ChipGrid:
     """Holds all state needed to iterate and extract chips from one source image.
 
-    Fields
-    ------
-    windows : List[Tuple[int, int, int, int]]
-        Ordered list of (col_off, row_off, w, h) pixel windows, one per chip.
-    source_image : np.ndarray
-        Full processed uint8 image array of shape (H, W, 3). Stored by
-        reference — not copied — so the array must remain alive for the
-        lifetime of this grid.
-    source_meta : dict
-        Rasterio-style metadata dict containing at minimum 'crs' and
-        'transform' keys for the source image.
-    chip_w : int
-        Nominal chip width in pixels. Edge chips may be narrower before
-        zero-padding is applied by get_chip.
-    chip_h : int
-        Nominal chip height in pixels. Edge chips may be shorter before
-        zero-padding is applied by get_chip.
-    n_rows : int
-        Number of chip rows in the grid.
-    n_cols : int
-        Number of chip columns in the grid.
-    edge_mode : str
-        Strategy used when the image extent is not an exact multiple of the
-        chip size. Either 'pad' or 'overlap' (see compute_chip_grid).
+    Attributes:
+        windows (List[Tuple[int, int, int, int]]): Ordered list of (col_off, row_off, w, h)
+            pixel windows, one per chip.
+        source_image (np.ndarray): Full processed uint8 image array of shape (H, W, 3).
+            Stored by reference — not copied — so the array must remain alive for the
+            lifetime of this grid.
+        source_meta (dict): Rasterio-style metadata dict containing at minimum 'crs' and
+            'transform' keys for the source image.
+        chip_w (int): Nominal chip width in pixels. Edge chips may be narrower before
+            zero-padding is applied by get_chip.
+        chip_h (int): Nominal chip height in pixels. Edge chips may be shorter before
+            zero-padding is applied by get_chip.
+        n_rows (int): Number of chip rows in the grid.
+        n_cols (int): Number of chip columns in the grid.
+        edge_mode (str): Strategy used when the image extent is not an exact multiple of
+            the chip size. Either 'pad' or 'overlap' (see compute_chip_grid).
     """
 
     windows: List[Tuple[int, int, int, int]]  # (col_off, row_off, w, h) per chip
@@ -60,39 +52,29 @@ class ChipGrid:
 def compute_chip_grid(img_w, img_h, chip_w, chip_h, overlap=0.0, edge_mode="pad") -> List[Tuple[int, int, int, int]]:
     """Return a list of (col_off, row_off, w, h) windows that tile the image.
 
-    Parameters
-    ----------
-    img_w : int
-        Width of the source image in pixels.
-    img_h : int
-        Height of the source image in pixels.
-    chip_w : int
-        Desired chip width in pixels.
-    chip_h : int
-        Desired chip height in pixels.
-    overlap : float, optional
-        Fractional overlap between adjacent chips in the range [0, 1).
-        An overlap of 0.25 means chips share 25 % of their width/height with
-        their neighbours. Default is 0.0 (no overlap).
-    edge_mode : str, optional
-        Controls how chips at the image boundary are handled.
+    Args:
+        img_w (int): Width of the source image in pixels.
+        img_h (int): Height of the source image in pixels.
+        chip_w (int): Desired chip width in pixels.
+        chip_h (int): Desired chip height in pixels.
+        overlap (float, optional): Fractional overlap between adjacent chips in the range
+            [0, 1). An overlap of 0.25 means chips share 25 % of their width/height with
+            their neighbours. Default is 0.0 (no overlap).
+        edge_mode (str, optional): Controls how chips at the image boundary are handled.
 
-        'pad'
-            The final row/column of chips may be smaller than chip_w/chip_h.
-            The caller (get_chip) zero-pads them to the nominal size. This
-            preserves exact coverage with no repeated pixels.
-        'overlap'
-            The last chip in each row/column is shifted left/up so that it
-            fits entirely within the image. This avoids sub-size chips at the
-            cost of introducing extra overlap at the boundary.
+            'pad': The final row/column of chips may be smaller than chip_w/chip_h. The
+            caller (get_chip) zero-pads them to the nominal size. This preserves exact
+            coverage with no repeated pixels.
 
-        Default is 'pad'.
+            'overlap': The last chip in each row/column is shifted left/up so that it fits
+            entirely within the image. This avoids sub-size chips at the cost of introducing
+            extra overlap at the boundary.
 
-    Returns
-    -------
-    List[Tuple[int, int, int, int]]
-        Ordered list of (col_off, row_off, w, h) pixel windows, traversed
-        row-major (left-to-right, top-to-bottom).
+            Default is 'pad'.
+
+    Returns:
+        List[Tuple[int, int, int, int]]: Ordered list of (col_off, row_off, w, h) pixel
+            windows, traversed row-major (left-to-right, top-to-bottom).
     """
     step_x = max(int(chip_w * (1 - overlap)), 1)
     step_y = max(int(chip_h * (1 - overlap)), 1)
@@ -142,22 +124,17 @@ def chip_affine(source_transform, col_off, row_off) -> rasterio.transform.Affine
     The rotation coefficients ``.b`` and ``.d`` are copied unchanged from
     the source transform so that non-north-up imagery is handled correctly.
 
-    Parameters
-    ----------
-    source_transform : rasterio.transform.Affine
-        Affine geotransform of the full source image.
-    col_off : int
-        Pixel column offset of the chip's top-left corner within the source
-        image.
-    row_off : int
-        Pixel row offset of the chip's top-left corner within the source
-        image.
+    Args:
+        source_transform (rasterio.transform.Affine): Affine geotransform of the full
+            source image.
+        col_off (int): Pixel column offset of the chip's top-left corner within the
+            source image.
+        row_off (int): Pixel row offset of the chip's top-left corner within the source
+            image.
 
-    Returns
-    -------
-    rasterio.transform.Affine
-        Affine geotransform placing the chip's top-left pixel at the correct
-        geographic coordinate.
+    Returns:
+        rasterio.transform.Affine: Affine geotransform placing the chip's top-left pixel
+            at the correct geographic coordinate.
     """
     origin_x = source_transform.c + col_off * source_transform.a
     origin_y = source_transform.f + row_off * source_transform.e
@@ -175,24 +152,17 @@ def get_chip(grid: ChipGrid, index: int) -> Tuple[np.ndarray, dict]:
     zero-padded (top-left aligned) to exactly (chip_h, chip_w, C) so that
     every chip returned by this function has a consistent shape.
 
-    Parameters
-    ----------
-    grid : ChipGrid
-        The chip grid produced by build_chip_grid. Holds the source image
-        reference, window list, and spatial metadata.
-    index : int
-        Flat (row-major) index into grid.windows. Must satisfy
-        0 <= index < grid.total.
+    Args:
+        grid (ChipGrid): The chip grid produced by build_chip_grid. Holds the source image
+            reference, window list, and spatial metadata.
+        index (int): Flat (row-major) index into grid.windows. Must satisfy
+            0 <= index < grid.total.
 
-    Returns
-    -------
-    chip_array : np.ndarray
-        uint8 array of shape (chip_h, chip_w, C) in HWC channel order.
-        Edge chips are zero-padded to reach the nominal size.
-    chip_meta : dict
-        Copy of grid.source_meta updated with chip-specific values:
-        'height', 'width', 'count', 'dtype', 'transform', 'row_idx',
-        'col_idx'.
+    Returns:
+        chip_array (np.ndarray): uint8 array of shape (chip_h, chip_w, C) in HWC channel
+            order. Edge chips are zero-padded to reach the nominal size.
+        chip_meta (dict): Copy of grid.source_meta updated with chip-specific values:
+            'height', 'width', 'count', 'dtype', 'transform', 'row_idx', 'col_idx'.
     """
     col_off, row_off, w, h = grid.windows[index]
 
@@ -228,29 +198,20 @@ def build_chip_grid(processed_img, source_meta, chip_w, chip_h, overlap=0.0, edg
     not copied. The array must remain alive and unmodified for the lifetime
     of the grid and any chips extracted from it.
 
-    Parameters
-    ----------
-    processed_img : np.ndarray
-        Processed source image of shape (H, W, C), dtype uint8.
-    source_meta : dict
-        Rasterio-style metadata dict for the source image, containing at
-        minimum 'crs' and 'transform' keys.
-    chip_w : int
-        Desired chip width in pixels.
-    chip_h : int
-        Desired chip height in pixels.
-    overlap : float, optional
-        Fractional overlap between adjacent chips; passed through to
-        compute_chip_grid. Default is 0.0.
-    edge_mode : str, optional
-        Edge-handling strategy ('pad' or 'overlap'); passed through to
-        compute_chip_grid. Default is 'pad'.
+    Args:
+        processed_img (np.ndarray): Processed source image of shape (H, W, C), dtype uint8.
+        source_meta (dict): Rasterio-style metadata dict for the source image, containing at
+            minimum 'crs' and 'transform' keys.
+        chip_w (int): Desired chip width in pixels.
+        chip_h (int): Desired chip height in pixels.
+        overlap (float, optional): Fractional overlap between adjacent chips; passed through
+            to compute_chip_grid. Default is 0.0.
+        edge_mode (str, optional): Edge-handling strategy ('pad' or 'overlap'); passed
+            through to compute_chip_grid. Default is 'pad'.
 
-    Returns
-    -------
-    ChipGrid
-        Populated grid whose windows, row/column counts, and source
-        references are ready for use with get_chip or export_chips.
+    Returns:
+        ChipGrid: Populated grid whose windows, row/column counts, and source references are
+            ready for use with get_chip or export_chips.
     """
     H, W, C = processed_img.shape
     windows = compute_chip_grid(W, H, chip_w, chip_h, overlap, edge_mode)

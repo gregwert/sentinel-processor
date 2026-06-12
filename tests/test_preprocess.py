@@ -8,7 +8,6 @@ import os
 import tempfile
 
 import numpy as np
-import pytest
 import rasterio
 from rasterio.crs import CRS
 from rasterio.io import MemoryFile
@@ -41,29 +40,17 @@ def make_fake_tiff(h=64, w=64, bands=3):
 # percentile_stretch tests
 # ---------------------------------------------------------------------------
 
-def test_percentile_stretch_output_dtype():
-    arr = np.random.randint(0, 65535, (100, 100, 3), dtype=np.uint16)
-    result = percentile_stretch(arr)
+_STRETCH_ARR = np.random.default_rng(0).integers(0, 65535, (100, 100, 3), dtype=np.uint16)
+
+
+def test_percentile_stretch_output_properties():
+    """Output is uint8, shape-preserving, value-bounded, and NaN-free."""
+    result = percentile_stretch(_STRETCH_ARR)
     assert result.dtype == np.uint8
-
-
-def test_percentile_stretch_output_range():
-    arr = np.random.randint(0, 65535, (100, 100, 3), dtype=np.uint16)
-    result = percentile_stretch(arr)
+    assert result.shape == _STRETCH_ARR.shape
     assert result.min() >= 0
     assert result.max() <= 255
-
-
-def test_percentile_stretch_no_nan():
-    arr = np.random.randint(0, 65535, (100, 100, 3), dtype=np.uint16)
-    result = percentile_stretch(arr).astype(np.float32)
-    assert not np.any(np.isnan(result))
-
-
-def test_percentile_stretch_shape_preserved():
-    arr = np.random.randint(0, 65535, (100, 100, 3), dtype=np.uint16)
-    result = percentile_stretch(arr)
-    assert result.shape == arr.shape
+    assert not np.any(np.isnan(result.astype(np.float32)))
 
 
 def test_percentile_stretch_flat_band():

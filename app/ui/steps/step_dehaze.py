@@ -2,10 +2,52 @@
 Step 2 — Cloud overlay with live-adjustable thresholds, DCP dehazing controls,
 side-by-side before/after comparison.
 """
+import numpy as np
 import streamlit as st
 from processing.dehazing import detect_clouds_simple, dehaze
 from ui.cloud_overlay import render_cloud_composite, compute_cloud_stats
 from ui.steps import render_step_nav
+
+
+def _render_brightness_histogram(img_uint8: np.ndarray, cloud_mask: np.ndarray) -> None:
+    """Render overlapping Altair histograms: cloud pixels (red) vs land pixels (blue).
+
+    Subsamples to 200 000 pixels max for performance on large images.
+
+    Parameters
+    ----------
+    img_uint8 : np.ndarray
+        Shape (H, W, 3), dtype uint8.
+    cloud_mask : np.ndarray
+        Shape (H, W), dtype bool.
+    """
+    import altair as alt
+    import pandas as pd
+
+    brightness = img_uint8.mean(axis=2).flatten()
+    label = np.where(cloud_mask.flatten(), "Cloud", "Land")
+    n = len(brightness)
+    if n > 200_000:
+        idx = np.random.default_rng(42).choice(n, 200_000, replace=False)
+        brightness = brightness[idx]
+        label = label[idx]
+
+    df = pd.DataFrame({"brightness": brightness.astype(float), "type": label})
+    chart = (
+        alt.Chart(df)
+        .mark_bar(opacity=0.55, binSpacing=0)
+        .encode(
+            alt.X("brightness:Q", bin=alt.Bin(maxbins=80), title="Mean brightness (0–255)"),
+            alt.Y("count()", title="Pixel count"),
+            alt.Color(
+                "type:N",
+                scale=alt.Scale(domain=["Cloud", "Land"], range=["#e45756", "#4c78a8"]),
+            ),
+        )
+        .properties(height=220)
+    )
+    st.altair_chart(chart, use_container_width=True)
+    st.caption("Red = cloud pixels  ·  Blue = non-cloud pixels")
 
 
 def render(state: dict) -> bool:
@@ -64,6 +106,8 @@ def render(state: dict) -> bool:
     st.caption("*Dark Channel Prior algorithm removes atmospheric haze and improves contrast over land. Safe to disable for already-clear imagery.*")
 
     if enable_dehaze:
+        _dp = state.get("dehaze_params") or {}
+
         mask_clouds = st.checkbox(
             "Cloud-adaptive atmospheric light",
             value=True,
@@ -80,7 +124,7 @@ def render(state: dict) -> bool:
                 "Brightness threshold",
                 0.5,
                 0.95,
-                0.75,
+                _dp.get("brightness_thresh", 0.75),
                 0.01,
             )
             st.caption("*Pixels brighter than this (0–1 scale) are cloud candidates. Raise to classify fewer pixels as cloud; lower to catch more.*")
@@ -88,7 +132,7 @@ def render(state: dict) -> bool:
                 "Saturation threshold",
                 0.01,
                 0.20,
-                0.08,
+                _dp.get("saturation_thresh", 0.08),
                 0.01,
             )
             st.caption("*Cloud pixels are nearly white (low colour saturation). Pixels with max–min channel difference below this are cloud candidates. Raise to catch more greyish clouds; lower for only pure-white clouds.*")
@@ -115,12 +159,16 @@ def render(state: dict) -> bool:
             stats = compute_cloud_stats(cloud_mask)
             st.caption(f"{stats['cloud_pct']}% cloud ({stats['cloud_px']:,} px)")
 
+            if cloud_mask.any() and (~cloud_mask).any():
+                with st.expander("Pixel brightness histogram"):
+                    _render_brightness_histogram(state["stretched_image"], cloud_mask)
+
         with st.expander("DCP parameters"):
             omega = st.slider(
                 "Omega — haze removal strength",
                 0.5,
                 1.0,
-                0.95,
+                _dp.get("omega", 0.95),
                 0.05,
             )
             st.caption("*Controls how aggressively haze is removed. 0.95 removes most haze; lower values preserve more of the original atmospheric tone. Values above 0.98 can over-saturate.*")
@@ -128,7 +176,7 @@ def render(state: dict) -> bool:
                 "t₀ — min transmission",
                 0.05,
                 0.5,
-                0.1,
+                _dp.get("t0", 0.1),
                 0.05,
             )
             st.caption("*Minimum transmission value — prevents over-brightening in very dense haze or fully clouded areas. Raise if output looks blown out; lower to dehaze more aggressively.*")
@@ -136,13 +184,13 @@ def render(state: dict) -> bool:
                 "Patch size",
                 5,
                 31,
-                15,
+                _dp.get("patch_size", 15),
                 2,
             )
             st.caption("*Size of the local window used to compute the dark channel. Larger patches give smoother results but may lose fine detail. 15 is a good default for satellite imagery.*")
             use_guided = st.checkbox(
                 "Guided filter refinement",
-                value=True,
+                value=_dp.get("use_guided", True),
             )
             st.caption("*Refines the transmission map to reduce halo artefacts at sharp edges (e.g. coastlines, cloud edges). Slightly slower but recommended.*")
 
