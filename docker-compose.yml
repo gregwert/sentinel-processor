@@ -1,26 +1,48 @@
 services:
-  sentinel-app:
-    build: .
-    container_name: sentinel-processor
-    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
-      - "8501:8501"
+      - "8000:8000"
     volumes:
-      - ./sample_data:/app/sample_data:ro
-      - chip_output:/tmp/chips
+      - session_data:/data
     environment:
-      - STREAMLIT_SERVER_MAX_UPLOAD_SIZE=2048
+      - DATA_DIR=/data
+      - SESSION_TTL_HOURS=6
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 15s
     deploy:
       resources:
         limits:
-          cpus: "2"
-          memory: 2G
+          cpus: "4"
+          memory: 8G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
     logging:
       driver: "json-file"
       options:
@@ -28,4 +50,4 @@ services:
         max-file: "3"
 
 volumes:
-  chip_output:
+  session_data:
